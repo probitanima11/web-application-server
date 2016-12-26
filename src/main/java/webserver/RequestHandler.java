@@ -34,7 +34,11 @@ public class RequestHandler extends Thread {
             String method = firstLine.split(" ")[0];
             String path = firstLine.split(" ")[1];
 
-            if (method != null && method.equalsIgnoreCase("get") && ("/index.html".equals(path) || "/user/form.html".equals(path))) {
+            if (method != null && method.equalsIgnoreCase("get")
+                && ("/index.html".equals(path)
+                || "/user/form.html".equals(path)
+                || "/user/login_failed.html".equals(path)
+                || "/user/login.html".equals(path))) {
                 responseForwarding(out, path);
             }
 
@@ -56,6 +60,26 @@ public class RequestHandler extends Thread {
                 DataBase.addUser(user);
                 responseRedirect(out, "/index.html");
             }
+
+            if (method != null && method.equalsIgnoreCase("post") && path != null && path.contains("/user/login")) {
+                String ContentLength = HttpRequestUtils.readUntil(bufferedReader, "Content-Length");
+                int limit = Integer.parseInt(ContentLength.split(": ")[1]);
+
+                while (!bufferedReader.readLine().equals("")) {
+                }
+
+                String formData = IOUtils.readData(bufferedReader, limit);
+
+                Map<String, String> paramsMap = HttpRequestUtils.parseQueryString(formData);
+
+                User user = DataBase.findUserById(paramsMap.get("userId"));
+
+                if (user.checkPassword(paramsMap.get("password"))) {
+                    responseLoginRedirect(out, "/index.html");
+                } else {
+                    responseForwarding(out, "/user/login_failed.html");
+                }
+            }
         } catch (IOException e) {
             log.error(e.getMessage());
         }
@@ -73,6 +97,10 @@ public class RequestHandler extends Thread {
         DataOutputStream dos = new DataOutputStream(out);
         response302Header(dos, path);
     }
+    private void responseLoginRedirect(OutputStream out, String path) {
+        DataOutputStream dos = new DataOutputStream(out);
+        response302LoginHeader(dos, path);
+    }
 
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
         try {
@@ -88,6 +116,18 @@ public class RequestHandler extends Thread {
     private void response302Header(DataOutputStream dos, String path) {
         try {
             dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("Location: "+path+"\r\n");
+            dos.writeBytes("\r\n");
+            dos.flush();
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void response302LoginHeader(DataOutputStream dos, String path) {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("Set-Cookie: logined=true\r\n");
             dos.writeBytes("Location: "+path+"\r\n");
             dos.writeBytes("\r\n");
             dos.flush();
