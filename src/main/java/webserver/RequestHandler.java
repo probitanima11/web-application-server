@@ -36,17 +36,26 @@ public class RequestHandler extends Thread {
             String method = firstLine.split(" ")[0];
             String path = firstLine.split(" ")[1];
 
+            if (path != null && path.contains(".css")) {
+                String acceptLine = HttpRequestUtils.readUntil(bufferedReader, "Accept");
+                if (acceptLine.split(": ").length > 0 && acceptLine.split(": ")[1].contains("text/css")) {
+                    responseCss(out, path);
+                    return;
+                }
+            }
+
             if (method != null && method.equalsIgnoreCase("get")
                 && ("/index.html".equals(path)
                 || "/user/form.html".equals(path)
                 || "/user/login_failed.html".equals(path)
                 || "/user/login.html".equals(path))) {
                 responseForwarding(out, path);
+                return;
             }
 
             if (method != null && method.equalsIgnoreCase("post") && path != null && path.contains("/user/create")) {
-                String ContentLength = HttpRequestUtils.readUntil(bufferedReader, "Content-Length");
-                int limit = Integer.parseInt(ContentLength.split(": ")[1]);
+                String contentLength = HttpRequestUtils.readUntil(bufferedReader, "Content-Length");
+                int limit = Integer.parseInt(contentLength.split(": ")[1]);
 
                 while (!bufferedReader.readLine().equals("")) {
                 }
@@ -61,6 +70,7 @@ public class RequestHandler extends Thread {
 
                 DataBase.addUser(user);
                 responseRedirect(out, "/index.html");
+                return;
             }
 
             if (method != null && method.equalsIgnoreCase("post") && path != null && path.contains("/user/login")) {
@@ -81,6 +91,7 @@ public class RequestHandler extends Thread {
                 } else {
                     responseForwarding(out, "/user/login_failed.html");
                 }
+                return;
             }
 
             // 사용자 목록 조회
@@ -103,6 +114,7 @@ public class RequestHandler extends Thread {
                 } else {
                     responseRedirect(out, "/user/login.html");
                 }
+                return;
             }
         } catch (IOException e) {
             log.error(e.getMessage());
@@ -150,9 +162,17 @@ public class RequestHandler extends Thread {
         DataOutputStream dos = new DataOutputStream(out);
         response302Header(dos, path);
     }
+
     private void responseLoginRedirect(OutputStream out, String path) {
         DataOutputStream dos = new DataOutputStream(out);
         response302LoginHeader(dos, path);
+    }
+
+    private void responseCss(OutputStream out, String path) throws IOException {
+        DataOutputStream dos = new DataOutputStream(out);
+        byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
+        response200CssHeader(dos, body.length);
+        responseBody(dos, body);
     }
 
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
@@ -184,6 +204,17 @@ public class RequestHandler extends Thread {
             dos.writeBytes("Location: "+path+"\r\n");
             dos.writeBytes("\r\n");
             dos.flush();
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void response200CssHeader(DataOutputStream dos, int lengthOfBodyContent) {
+        try {
+            dos.writeBytes("HTTP/1.1 200 OK \r\n");
+            dos.writeBytes("Content-Type: text/css;charset=utf-8\r\n");
+            dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
+            dos.writeBytes("\r\n");
         } catch (IOException e) {
             log.error(e.getMessage());
         }
