@@ -1,16 +1,18 @@
 package webserver;
 
-import java.io.*;
-import java.net.Socket;
-import java.nio.file.Files;
-import java.util.Map;
-
 import db.DataBase;
 import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import util.HttpRequestUtils;
 import util.IOUtils;
+import util.ReplacingInputStream;
+
+import java.io.*;
+import java.net.Socket;
+import java.nio.file.Files;
+import java.util.Collection;
+import java.util.Map;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
@@ -62,13 +64,13 @@ public class RequestHandler extends Thread {
             }
 
             if (method != null && method.equalsIgnoreCase("post") && path != null && path.contains("/user/login")) {
-                String ContentLength = HttpRequestUtils.readUntil(bufferedReader, "Content-Length");
-                int limit = Integer.parseInt(ContentLength.split(": ")[1]);
+                String contentLengthLine = HttpRequestUtils.readUntil(bufferedReader, "Content-Length");
+                int contentLength = Integer.parseInt(contentLengthLine.split(": ")[1]);
 
                 while (!bufferedReader.readLine().equals("")) {
                 }
 
-                String formData = IOUtils.readData(bufferedReader, limit);
+                String formData = IOUtils.readData(bufferedReader, contentLength);
 
                 Map<String, String> paramsMap = HttpRequestUtils.parseQueryString(formData);
 
@@ -80,9 +82,60 @@ public class RequestHandler extends Thread {
                     responseForwarding(out, "/user/login_failed.html");
                 }
             }
+
+            // 사용자 목록 조회
+            if (method != null && method.equalsIgnoreCase("get") && path != null && path.contains("/user/list")) {
+                String cookieLine = HttpRequestUtils.readUntil(bufferedReader, "Cookie");
+                Map<String, String> cookies = HttpRequestUtils.parseCookies(cookieLine.split(": ")[1]);
+                boolean isLogin = Boolean.parseBoolean(cookies.get("logined"));
+
+                if (isLogin) {
+                    Collection<User> users = DataBase.findAll();
+
+                    byte[] body = Files.readAllBytes(new File("./webapp/user/list.html").toPath());
+                    byte[] search = "<%userList%>".getBytes();
+                    byte[] replacement = makeTagOfUserList(users).toString().getBytes();
+                    byte[] subsBody = makeSubstituteByteArray(body, search, replacement);
+
+                    DataOutputStream dos = new DataOutputStream(out);
+                    response200Header(dos, subsBody.length);
+                    responseBody(dos, subsBody);
+                } else {
+                    responseRedirect(out, "/user/login.html");
+                }
+            }
         } catch (IOException e) {
             log.error(e.getMessage());
         }
+    }
+
+    private StringBuilder makeTagOfUserList(Collection<User> users) {
+        StringBuilder sb = new StringBuilder();
+        int index = 1;
+        for (User user : users) {
+			sb.append("<tr>");
+			sb.append("<th scope=\"row\">"+index+"</th>");
+			sb.append("<td>" + user.getUserId() + "</td>");
+			sb.append("<td>" + user.getName() + "</td>");
+			sb.append("<td>" + user.getEmail() + "</td>");
+			sb.append("<td><a href=\"#\" class=\"btn btn-success\" role=\"button\">수정</a></td>");
+			sb.append("</tr>");
+			index++;
+		}
+        return sb;
+    }
+
+    private byte[] makeSubstituteByteArray(byte[] body, byte[] search, byte[] replacement) throws IOException {
+        ByteArrayInputStream bis = new ByteArrayInputStream(body);
+        InputStream ris = new ReplacingInputStream(bis, search, replacement);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+
+        int b;
+        while (-1 != (b = ris.read())) {
+			bos.write(b);
+		}
+
+        return bos.toByteArray();
     }
 
     private void responseForwarding(OutputStream out, String path) throws IOException {
