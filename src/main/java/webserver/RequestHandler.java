@@ -10,6 +10,7 @@ import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import util.HttpRequestUtils;
+import util.IOUtils;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
@@ -30,19 +31,38 @@ public class RequestHandler extends Thread {
             // 사용자 요청 추출
             BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(in));
             String firstLine = bufferedReader.readLine();
+            String method = firstLine.split(" ")[0];
             String path = firstLine.split(" ")[1];
 
-            if ("/index.html".equals(path) || "/user/form.html".equals(path)) {
+            if (method != null && method.equalsIgnoreCase("get") && path != null && path.contains("/user/create")) {
+                String paramsStr = path.split("\\?")[1];
+                Map<String, String> paramsMap = HttpRequestUtils.parseQueryString(paramsStr);
+                User user = new User(paramsMap.get("userId"),
+                    paramsMap.get("password"),
+                    paramsMap.get(" kname"),
+                    paramsMap.get("email"));
+
+                DataBase.addUser(user);
+            }
+
+            if (method != null && method.equalsIgnoreCase("get") && ("/index.html".equals(path) || "/user/form.html".equals(path))) {
                 byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
 
                 DataOutputStream dos = new DataOutputStream(out);
                 response200Header(dos, body.length);
                 responseBody(dos, body);
+            }
 
-            } else if (path != null && path.contains("/user/create")) {
-                String paramsStr = path.split("\\?")[1];
-                Map<String, String> paramsMap = HttpRequestUtils.parseQueryString(paramsStr);
+            if (method != null && method.equalsIgnoreCase("post") && path != null && path.contains("/user/create")) {
+                String ContentLength = HttpRequestUtils.readUntil(bufferedReader, "Content-Length");
+                int limit = Integer.parseInt(ContentLength.split(": ")[1]);
 
+                while (!bufferedReader.readLine().equals("")) {
+                }
+
+                String formData = IOUtils.readData(bufferedReader, limit);
+
+                Map<String, String> paramsMap = HttpRequestUtils.parseQueryString(formData);
                 User user = new User(paramsMap.get("userId"),
                     paramsMap.get("password"),
                     paramsMap.get("name"),
