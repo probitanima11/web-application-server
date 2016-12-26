@@ -3,9 +3,13 @@ package webserver;
 import java.io.*;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.util.Map;
 
+import db.DataBase;
+import model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import util.HttpRequestUtils;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
@@ -28,12 +32,24 @@ public class RequestHandler extends Thread {
             String firstLine = bufferedReader.readLine();
             String path = firstLine.split(" ")[1];
 
-            // 파일 내용 읽기
-            byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
+            if ("/index.html".equals(path) || "/user/form.html".equals(path)) {
+                byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
 
-            DataOutputStream dos = new DataOutputStream(out);
-            response200Header(dos, body.length);
-            responseBody(dos, body);
+                DataOutputStream dos = new DataOutputStream(out);
+                response200Header(dos, body.length);
+                responseBody(dos, body);
+
+            } else if (path != null && path.contains("/user/create")) {
+                String paramsStr = path.split("\\?")[1];
+                Map<String, String> paramsMap = HttpRequestUtils.parseQueryString(paramsStr);
+
+                User user = new User(paramsMap.get("userId"),
+                    paramsMap.get("password"),
+                    paramsMap.get("name"),
+                    paramsMap.get("email"));
+
+                DataBase.addUser(user);
+            }
         } catch (IOException e) {
             log.error(e.getMessage());
         }
