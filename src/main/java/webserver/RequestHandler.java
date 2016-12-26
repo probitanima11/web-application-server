@@ -34,23 +34,8 @@ public class RequestHandler extends Thread {
             String method = firstLine.split(" ")[0];
             String path = firstLine.split(" ")[1];
 
-            if (method != null && method.equalsIgnoreCase("get") && path != null && path.contains("/user/create")) {
-                String paramsStr = path.split("\\?")[1];
-                Map<String, String> paramsMap = HttpRequestUtils.parseQueryString(paramsStr);
-                User user = new User(paramsMap.get("userId"),
-                    paramsMap.get("password"),
-                    paramsMap.get(" kname"),
-                    paramsMap.get("email"));
-
-                DataBase.addUser(user);
-            }
-
             if (method != null && method.equalsIgnoreCase("get") && ("/index.html".equals(path) || "/user/form.html".equals(path))) {
-                byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
-
-                DataOutputStream dos = new DataOutputStream(out);
-                response200Header(dos, body.length);
-                responseBody(dos, body);
+                responseForwarding(out, path);
             }
 
             if (method != null && method.equalsIgnoreCase("post") && path != null && path.contains("/user/create")) {
@@ -69,10 +54,24 @@ public class RequestHandler extends Thread {
                     paramsMap.get("email"));
 
                 DataBase.addUser(user);
+                responseRedirect(out, "/index.html");
             }
         } catch (IOException e) {
             log.error(e.getMessage());
         }
+    }
+
+    private void responseForwarding(OutputStream out, String path) throws IOException {
+        byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
+
+        DataOutputStream dos = new DataOutputStream(out);
+        response200Header(dos, body.length);
+        responseBody(dos, body);
+    }
+
+    private void responseRedirect(OutputStream out, String path) {
+        DataOutputStream dos = new DataOutputStream(out);
+        response302Header(dos, path);
     }
 
     private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
@@ -81,6 +80,17 @@ public class RequestHandler extends Thread {
             dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
             dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void response302Header(DataOutputStream dos, String path) {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Found \r\n");
+            dos.writeBytes("Location: "+path+"\r\n");
+            dos.writeBytes("\r\n");
+            dos.flush();
         } catch (IOException e) {
             log.error(e.getMessage());
         }
